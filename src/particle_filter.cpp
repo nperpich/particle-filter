@@ -15,6 +15,9 @@
 #include <string>
 #include <iterator>
 
+#include <stdlib.h>
+#include <time.h>
+
 #include "particle_filter.h"
 
 using namespace std;
@@ -24,7 +27,29 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	//   x, y, theta and their uncertainties from GPS) and all weights to 1. 
 	// Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
-
+	//num_particles = 50; don't have to set here. Is done in constructor in heading file
+	
+	float sig_x = std[0];
+	float sig_y = std[1];
+	float sig_theta = std[2];
+	
+	std::default_random_engine generator;
+	std::normal_distribution<double> x_noisey(x, sig_x);
+	std::normal_distribution<double> y_noisey(y, sig_y);
+	std::normal_distribution<double> theta_noisey(theta, sig_theta);
+	
+	for(int i=0; i<num_particles; i++){
+		//intermediate that holds all info for particle being created
+		Particle sample_particle;
+		
+		sample_particle.id = i;
+		sample_particle.x = x_noisey(generator);
+		sample_particle.y = y_noisey(generator);
+		sample_particle.theta = theta_noisey(generator);
+		sample_particle.weight = 1.0;
+		
+		particles.push_back(sample_particle);
+	}
 }
 
 void ParticleFilter::prediction(double delta_t, double std_pos[], double velocity, double yaw_rate) {
@@ -32,7 +57,24 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 	// NOTE: When adding noise you may find std::normal_distribution and std::default_random_engine useful.
 	//  http://en.cppreference.com/w/cpp/numeric/random/normal_distribution
 	//  http://www.cplusplus.com/reference/random/default_random_engine/
-
+	float sig_x = std_pos[0];
+	float sig_y = std_pos[1];
+	float sig_theta = std_pos[2];
+	
+	std::default_random_engine generator;
+	std::normal_distribution<double> x_noise(0.0, sig_x);
+	std::normal_distribution<double> y_noise(0.0, sig_y);
+	std::normal_distribution<double> theta_noise(0.0, sig_theta);
+	
+	for(int i=0; i<num_particles; i++){
+		float x = particles[i].x;
+		float y = particles[i].y;
+		float theta = particles[i].theta;
+		
+		particles[i].x += velocity/yaw_rate*[math.sin(theta + yaw_rate*delta_t) - math.sin(theta)] + x_noise;
+		particles[i].y += velocity/yaw_rate*[math.cos(theta)-math.cos(theta+yaw_rate*delta_t)] + y_noise;
+		particles[i].theta += yaw_rate*delta_t + theta_noise;
+	}
 }
 
 void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::vector<LandmarkObs>& observations) {
@@ -55,6 +97,22 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
 	//   and the following is a good resource for the actual equation to implement (look at equation 
 	//   3.33
 	//   http://planning.cs.uiuc.edu/node99.html
+	
+	//transform observations into map coordinate system
+	for(int i=0; i<num_particles; i++){
+		float x = particles[i].x;
+		float y = particles[i].y;
+		float theta = particles[i].theta;
+		
+		for(int j; j<sizeof(observations); j++){	
+			float x_obs_map = x+ observations[j].x*math.cos(theta) - observations[j].y*math.sin(theta);
+			float y_obs_map = y +observations[j].x*math.sin(theta) + observations[j].y*math.cos(theta);
+			
+			particles[i].sense_x.push_back(x_obs_map);
+			particles[i].sense_y.push_back(y_obs_map);
+		}
+	}
+	
 }
 
 void ParticleFilter::resample() {
