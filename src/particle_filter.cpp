@@ -17,6 +17,7 @@
 
 #include <stdlib.h>
 #include <time.h>
+#include <map> //for discrete_distribution
 
 #include "particle_filter.h"
 
@@ -27,7 +28,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
 	//   x, y, theta and their uncertainties from GPS) and all weights to 1. 
 	// Add random Gaussian noise to each particle.
 	// NOTE: Consult particle_filter.h for more information about this method (and others in this file).
-	//num_particles = 50; don't have to set here. Is done in constructor in heading file
+	num_particles = 50; 
 
 	double sig_x = std[0];
 	double sig_y = std[1];
@@ -73,10 +74,17 @@ void ParticleFilter::prediction(double delta_t, double std_pos[], double velocit
 		double y = particles[i].y;
 		double theta = particles[i].theta;
 		
-		particles[i].x += velocity/yaw_rate*(sin(theta + yaw_rate*delta_t) - sin(theta)) + x_noise(generator);
-		particles[i].y += velocity/yaw_rate*(cos(theta)-cos(theta+yaw_rate*delta_t)) + y_noise(generator);
-		particles[i].theta += yaw_rate*delta_t + theta_noise(generator);
+		if (abs(yaw_rate) > 0.0001) {
 
+			particles[i].x += velocity / yaw_rate*(sin(theta + yaw_rate*delta_t) - sin(theta)) + x_noise(generator);
+			particles[i].y += velocity / yaw_rate*(cos(theta) - cos(theta + yaw_rate*delta_t)) + y_noise(generator);
+			particles[i].theta += yaw_rate*delta_t + theta_noise(generator);
+		}
+		else {
+			particles[i].x += velocity*cos(theta)*delta_t + x_noise(generator);
+			particles[i].y += velocity*sin(theta)*delta_t + y_noise(generator);
+			particles[i].theta += theta_noise(generator);
+		}
 	}
 }
 
@@ -94,7 +102,7 @@ void ParticleFilter::dataAssociation(std::vector<LandmarkObs> predicted, std::ve
 
 		double lowest_dist = 160.0;
 		double current_dist;
-		int id = -1;
+		int id = 0;
 		LandmarkObs closest_landmark;
 		for (int j = 0; j < predicted.size(); j++) {
 			current_dist = dist(observations[i].x, observations[i].y, predicted[j].x, predicted[j].y);
@@ -177,7 +185,21 @@ void ParticleFilter::resample() {
 	// TODO: Resample particles with replacement with probability proportional to their weight. 
 	// NOTE: You may find std::discrete_distribution helpful here.
 	//   http://en.cppreference.com/w/cpp/numeric/random/discrete_distribution
+	weights.clear();
+	
+	for (int i = 0; i < num_particles; i++) {
+		weights.push_back(particles[i].weight);
+	}
+	std::vector<Particle> sampled_particles;
 
+	random_device rd;
+	mt19937 gen(rd());
+	discrete_distribution<> d(weights.begin(), weights.end());
+	map<int, int> m;
+	for (int n = 0; n<num_particles; ++n) {
+		sampled_particles.push_back(particles[d(gen)]);
+	}
+	particles = sampled_particles;
 }
 
 Particle ParticleFilter::SetAssociations(Particle& particle, const std::vector<int>& associations, 
